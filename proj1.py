@@ -1,5 +1,6 @@
 from collections import defaultdict
 import numpy as np
+from itertools import product
 
 class Graph:
 	def __init__(self, adjacencyMatrix, data):
@@ -42,6 +43,7 @@ class Preprocess:
 				self.enumValueMap[attributeIndex][uniqueVals.index(uniqueVal)] = uniqueVal.lower()
 
     def compactifyData(self):
+        #self.data is  a numpy matrix representation of the data
 		self.data = np.array(np.zeros(len(self.rawData[0])))
 		for row in self.rawData:
 			self.data = np.vstack([self.data, [self.valueEnumMap[attributeIndex][row[attributeIndex].lower()] for attributeIndex in range(len(row))]])
@@ -59,13 +61,38 @@ class Preprocess:
 
         return _cpd
 
+    def flatten(self, bla):
+        output = []
+        for item in bla:
+            output += flatten(item) if hasattr (item, "__iter__") or hasattr (item, "__len__") else [item]
+        return output
+
+    def combinations(self, discreteParents):
+        a = set(self.data[:,discreteParents[0]])
+        for i in range(1, len(discreteParents))
+            a = product(a, set(self.data[:,discreteParents[i]]))
+    
+        res = []
+        for i in a:
+            res.append(flatten(i))
+
+        return res
+
+    # continous parent to discrete child
     def _generateCDCPD(self, child, parents):
-        continousParents = [i[0] for i in parents if i[1] == 'c']
-        discreteParents = [i[0] for i in parents if i[1] == 'd']
-        X = self.data[:, continousParents]
-        y = self.data[:, child]
-        clf = svm.SVC()
-        clf.fit(X, y)
+        continousParents = [i for i in parents if self.attrType[i] == 'continous']
+        discreteParents = [i for i in parents if self.attrType[i] == 'discrete']
+
+        discreteParentValues = combinations(discreteParents)
+        for i in discreteParentValues:
+            cols = {}
+            for j in range(len(discreteParents)):
+                cols[discreteParents[j]] = i[j]
+            # select rows with column values matching each of the combination for parent variables
+            X = self.data[np.logical_and.reduce([self.data[:, k] == cols[k] for k in cols])][:, continousParents]
+            y = self.data[:, child]
+            clf = svm.SVC()
+            clf.fit(X, y)
 	
     def getCPD(self, child, parents):
 		newParents = {}
