@@ -3,6 +3,14 @@ import numpy as np
 from itertools import product
 from sklearn.linear_model import LogisticRegression
 
+from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import Ridge
+from matplotlib import pyplot as plt
+
+# ignore DeprecateWarnings by sklearn
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 class Graph:
 	def __init__(self, adjacencyMatrix, data):
 		self.adjM = adjacencyMatrix
@@ -36,7 +44,7 @@ class CPD:
 		
 
 class Preprocess:
-    def __init__(self, dataFile):
+    def __init__(self, dataFile, N=199523):
         self.dataFile = dataFile
         self.rawData = []
         self.cpd = {}
@@ -89,6 +97,9 @@ class Preprocess:
         f = open(self.dataFile)
         lines = f.readlines()
         f.close()
+
+        with open(self.dataFile) as data_file:
+            lines = [next(data_file) for x in xrange(N)]
 
         self.numAttrs = len(lines[0].split(','))
         self.map = [defaultdict(lambda: 0) for attributeIndex in range(self.numAttrs)]
@@ -166,6 +177,41 @@ class Preprocess:
             y = self.data[:, child]
             self.cpd[child]['continous'] = CPD('continous', X, y)
 
+    def _generateCCCPD(self, child, parents):
+        continousParents = [i for i in parents]
+        X = self.data[:, continousParents]   
+        y = self.data[:, child]
+
+        xp = np.linspace(-5, 50, 100)
+        all_residual=[]
+        all_p=[]
+        for i in range(1,15,1):
+            p, residual, _, _, _ = np.polyfit(X[:,0],y[:,0], i, full=True)
+            all_residual.append(residual[0])
+            all_p.append(p)
+
+        best_fit=all_p[all_residual.index(min(all_residual))-1]
+        print best_fit
+
+    def _generateDCCPD(self, child, parents):
+        discreteParents = [i for i in parents]
+        discreteParentValues = self.combinations(discreteParents)
+        
+        gaus_for_all=[]
+        for i in discreteParentValues:
+            cols = {}
+            for j in range(len(discreteParents)):
+                cols[discreteParents[j]] = i[j]
+
+            x = self.data[np.logical_and.reduce([self.data[:, k] == cols[k] for k in cols])]
+            if len(x[:, child])!=0:
+                y=x[:, child]
+        
+                cols["mean"]=np.mean(y)
+                cols["var"]=np.var(y, dtype=np.float64)
+                gaus_for_all.append(cols)
+        print gaus_for_all
+
         
     def getCPD(self, child, parents):
 		newParents = {}
@@ -184,5 +230,9 @@ class Preprocess:
 	
 
 if __name__ == '__main__':
-	#a = Preprocess('a')
-	pass
+    #lines_to_read=100
+    #a=Preprocess('/home/karan/Downloads/census-income.data', lines_to_read)
+    #a=Preprocess('/home/karan/Downloads/census-income.data')
+    #a._generateDCCPD([0], [1,8])
+    #a._generateCCCPD([0],[39])
+    pass
