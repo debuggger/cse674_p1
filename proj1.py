@@ -5,11 +5,16 @@ from sklearn.linear_model import LogisticRegression
 
 from sklearn.linear_model import LinearRegression
 from sklearn.linear_model import Ridge
-from matplotlib import pyplot as plt
+import random
+#from matplotlib import pyplot as plt
 
 # ignore DeprecateWarnings by sklearn
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+class Sample:
+	def __init__(self, p):
+		pass
 
 class Graph:
 	def __init__(self, adjacencyMatrix, data):
@@ -19,28 +24,53 @@ class Graph:
 	def generateTabularCPD(self):
 		pass
 
+class SpecialDiscreteChild:
+	def __init__(self, classLabel):
+		self.classLabel = classLabel
+		self.clf = []
+		if len(classLabel) == 1:
+			self.clf.append(1.0)
+	
+	def predict_proba(self, X):
+		return [self.clf for x in X]
+		
+
 class CPD:
     def __init__(self, parentType, X, y):
-        self.parentType = parentType
-        
-        if self.parentType == 'hybrid' or self.parentType == 'continous':
-            clf = LogisticRegression(multi_class='multinomial', solver='newton-cg')
-            clf.fit(X, y)
-            self.obj = clf
-        else:
-            unique, counts = np.unique(y, return_counts=True)
-            self.obj = dict(zip(unique, counts))
-            denom = sum(self.obj.values())
+		self.parentType = parentType
+		self.classLabels = list(set(y))
+		self.classLabels.sort()
 
-            for i in self.obj:
-                self.obj[i] /= denom
+		if self.parentType == 'hybrid' or self.parentType == 'continous':
+			if len(set(y)) > 1:
+				clf = LogisticRegression(multi_class='multinomial', solver='newton-cg')
+				clf.fit(X, y)
+			else:
+				clf = SpecialDiscreteChild(set(y))
+		
+			self.obj = clf
+		
+		else:
+			unique, counts = np.unique(y, return_counts=True)
+			denom = sum(counts)
+			probTable = zip(unique, [i/denom for i in counts])
+			self.obj = defaultdict(lambda: 0, probTable)
 
-    def getProb(X, c):
+
+    def getProb(self, X, c):
         if self.parentType == 'hybrid' or self.parentType == 'continous':
-            return self.obj.predict_proba(X)[c]
+			clfResults = self.obj.predict_proba(X)
+			res = []
+			for clfResult in clfResults:
+				if c in self.classLabels:
+					res.append(clfResult[self.classLabels.index(c)])
+				else:
+					res.append(0.0)
+			return res
         else:
             return self.obj[c]
-        
+
+       
 		
 
 class Preprocess:
@@ -152,30 +182,34 @@ class Preprocess:
 
     # continous parent to discrete child
     def _generateDiscreteChildCPD(self, child, parents):
-        discreteParents = [i for i in parents if self.attr[i]['type'] == 'discrete']
-        continousParents = [i for i in parents if self.attr[i]['type'] == 'continous']
-               
-        self.cpd[child] = {}
+		discreteParents = [i for i in parents if self.attr[i]['type'] == 'discrete']
+		continousParents = [i for i in parents if self.attr[i]['type'] == 'continous']
+			   
+		discreteParents.sort()
+		continousParents.sort()
 
-        if len(discreteParents) > 0:
-            discreteParentValues = self.combinations(discreteParents)
-            for i in discreteParentValues:
-                cols = {}
-                for j in range(len(discreteParents)):
-                    cols[discreteParents[j]] = i[j]
-               
-                # select rows with column values matching each of the combination for parent variables
-                y = self.data[np.logical_and.reduce([self.data[:, k] == cols[k] for k in cols])][:, child]
-                if len(continousParents) > 0:
-                    X = self.data[np.logical_and.reduce([self.data[:, k] == cols[k] for k in cols])][:, continousParents]
-                    self.cpd[child][tuple(i)] = CPD('hybrid', X, y)
-                else:
-                    self.cpd[child][tuple(i)] = CPD('discrete', None, y)
+		self.cpd[child] = defaultdict(lambda: 0.0)
+		childDomain = set(self.data[:, child]) 
 
-        else:
-            X = self.data[:, continousParents]
-            y = self.data[:, child]
-            self.cpd[child]['continous'] = CPD('continous', X, y)
+		if len(discreteParents) > 0:
+			discreteParentValues = self.combinations(discreteParents)
+			for i in discreteParentValues:
+				cols = {}
+				for j in range(len(discreteParents)):
+					cols[discreteParents[j]] = i[j]
+			   
+				# select rows with column values matching each of the combination for parent variables
+				y = self.data[np.logical_and.reduce([self.data[:, k] == cols[k] for k in cols])][:, child]
+				if len(continousParents) > 0:
+					X = self.data[np.logical_and.reduce([self.data[:, k] == cols[k] for k in cols])][:, continousParents]
+					self.cpd[child][tuple(i)] = CPD('hybrid', X, y)
+				else:
+					self.cpd[child][tuple(i)] = CPD('discrete', None, y)
+
+		else:
+			X = self.data[:, continousParents]
+			y = self.data[:, child]
+			self.cpd[child]['continous'] = CPD('continous', X, y)
 
     def _generateCCCPD(self, child, parents):
         continousParents = [i for i in parents]
@@ -227,6 +261,7 @@ class Preprocess:
 			cpd[val] = _cpd[enumVal]
 
 		return (cpd, _cpd)
+
 	
 
 if __name__ == '__main__':
