@@ -60,7 +60,7 @@ attr = {
 
 def init_network():
 	network = np.zeros((len(attr), len(attr)))
-	network[0, [1, 6, 7, 8, 9] = 1
+	network[0, [1, 6, 7, 8, 9]] = 1
 	network[1, [14, 15, 22]] = 1
 	network[4, [0, 9]] = 1
 	network[6, [8, 14, 29]] = 1
@@ -177,8 +177,8 @@ class SpecialDiscreteChild:
 		
 
 class CPD:
-    def __init__(self, parentType, X, y, childType='discrete'):
-		self.childType
+	def __init__(self, parentType, X, y, childType='discrete'):
+		self.childType = childType
 		self.parentType = parentType
 		self.classLabels = list(set(y))
 		self.classLabels.sort()
@@ -199,11 +199,19 @@ class CPD:
 				probTable = zip(unique, [i/denom for i in counts])
 				self.obj = defaultdict(lambda: 0, probTable)
 
-		elif childType = 'continuous':
+		elif childType == 'continuous':
 			if self.parentType == 'hybrid' or self.parentType == 'continuous':
-				pass
+				degree= len(continuousParents)*2
+				model_lr = make_pipeline(PolynomialFeatures(degree), Ridge())
+				model_lr.fit(X, y)
+				self.obj = model_lr
+				self.lr_variance = 1-q.score(X,y)
+				# y_pre = model.predict(x)
 			else:
-				pass
+				mean=np.mean(y)
+				variance=np.var(y, dtype=np.float64)
+				self.mean=mean
+				self.variance=variance
 
 
 	def getFullProbTable(self, conditionalVariables=None):
@@ -215,41 +223,45 @@ class CPD:
 				res = self.obj.items()
 				res.sort(key = lambda x: x[0])
 				return res
+
 		else:
 			if self.parentType == 'hybrid' or self.parentType == 'continuous':
-				pass
+				lr_predict = self.obj.predict(conditionalVariables)
+				res={"mean":lr_predict, "variance":self.lr_variance}
+				return res
 			else:
-				pass
+				res={"mean":mean, "variance":self.variance}
+				return res
 
 
-      
+	  
 		
 
 class Preprocess:
-    def __init__(self, dataFile, N=199523, cols = 42):
-        self.dataFile = dataFile
-        self.rawData = []
-        self.cpd = {}
+	def __init__(self, dataFile, N=199523, cols = 42):
+		self.dataFile = dataFile
+		self.rawData = []
+		self.cpd = {}
 
-        f = open(self.dataFile)
-        lines = f.readlines()[:N]
-        f.close()
+		f = open(self.dataFile)
+		lines = f.readlines()[:N]
+		f.close()
 
 
-        self.numAttrs = len(lines[0].split(','))
-        self.map = [defaultdict(lambda: 0) for attributeIndex in range(self.numAttrs)]
+		self.numAttrs = len(lines[0].split(','))
+		self.map = [defaultdict(lambda: 0) for attributeIndex in range(self.numAttrs)]
 
-        for dataRow in lines:
-            dataSample = dataRow.split(',')
-            self.rawData.append([attributeVal.strip() for attributeVal in dataSample])
+		for dataRow in lines:
+			dataSample = dataRow.split(',')
+			self.rawData.append([attributeVal.strip() for attributeVal in dataSample])
 
-            for attributeIndex in range(len(dataSample)):
-                self.map[attributeIndex][dataSample[attributeIndex].strip()] += 1 
+			for attributeIndex in range(len(dataSample)):
+				self.map[attributeIndex][dataSample[attributeIndex].strip()] += 1 
 
-        self.generateValueMappings()
-        self.compactifyData()
-    
-    def generateValueMappings(self):
+		self.generateValueMappings()
+		self.compactifyData()
+	
+	def generateValueMappings(self):
 		self.valueEnumMap = [defaultdict(lambda: 0) for i in range(self.numAttrs)]
 		self.enumValueMap = [defaultdict(lambda: 0) for i in range(self.numAttrs)]
 		for attributeIndex in range(self.numAttrs):
@@ -258,35 +270,36 @@ class Preprocess:
 				self.valueEnumMap[attributeIndex][uniqueVal.lower()] = uniqueVals.index(uniqueVal)
 				self.enumValueMap[attributeIndex][uniqueVals.index(uniqueVal)] = uniqueVal.lower()
 
-    def compactifyData(self):
-        #self.data is  a numpy matrix representation of the data
+	def compactifyData(self):
+		#self.data is  a numpy matrix representation of the data
 		self.data = np.array(np.zeros(len(self.rawData[0])))
 		for row in self.rawData:
 			self.data = np.vstack([self.data, [self.valueEnumMap[attributeIndex][row[attributeIndex].lower()] for attributeIndex in range(len(row))]])
 	
-    def flatten(self, bla):
-        output = []
-        for item in bla:
-            output += self.flatten(item) if hasattr (item, "__iter__") or hasattr (item, "__len__") else [item]
-        return output
+	def flatten(self, bla):
+		output = []
+		for item in bla:
+			output += self.flatten(item) if hasattr (item, "__iter__") or hasattr (item, "__len__") else [item]
+		return output
 
-    def combinations(self, discreteParents):
-        res = []
-        a = set(self.data[:,discreteParents[0]])
-        
-        if len(discreteParents) == 1:
-            return [tuple([i]) for i in a]
+	def combinations(self, discreteParents):
+		res = []
+		a = set(self.data[:,discreteParents[0]])
+		
+		if len(discreteParents) == 1:
+			return [tuple([i]) for i in a]
 
-        for i in range(1, len(discreteParents)):
-            a = product(a, set(self.data[:,discreteParents[i]]))
-    
-        for i in a:
-            res.append(self.flatten(i))
+		for i in range(1, len(discreteParents)):
+			a = product(a, set(self.data[:,discreteParents[i]]))
+	
+		for i in a:
+			res.append(self.flatten(i))
 
-        return res
+		return res
 
-    # continuous parent to discrete child
-    def _generateDiscreteChildCPD(self, child, parents):
+	# continuous parent to discrete child
+	def _generateDiscreteChildCPD(self, child, parents):
+		print parents
 		discreteParents = [i for i in parents if attr[i]['type'] == 'discrete']
 		continuousParents = [i for i in parents if attr[i]['type'] == 'continuous']
 			   
@@ -320,43 +333,44 @@ class Preprocess:
 			y = self.data[:, child]
 			self.cpd[child]['independent'] = CPD('independent', None, y, 'discrete')
 
-    def _generateCCCPD(self, child, parents):
-        continuousParents = [i for i in parents]
-        X = self.data[:, continuousParents]   
-        y = self.data[:, child]
+	def _generateContinuousChildCPD(self, child, parents):
+		discreteParents = [i for i in parents if attr[i]['type'] == 'discrete']
+		continuousParents = [i for i in parents if attr[i]['type'] == 'continuous']
+			   
+		discreteParents.sort()
+		continuousParents.sort()
 
-        xp = np.linspace(-5, 50, 100)
-        all_residual=[]
-        all_p=[]
-        for i in range(1,15,1):
-            p, residual, _, _, _ = np.polyfit(X[:,0],y[:,0], i, full=True)
-            all_residual.append(residual[0])
-            all_p.append(p)
+		self.cpd[child] = defaultdict(lambda: 0.0)
+		childDomain = set(self.data[:, child])
 
-        best_fit=all_p[all_residual.index(min(all_residual))-1]
-        print best_fit
+		if len(discreteParents) > 0:
+			discreteParentValues = self.combinations(discreteParents)
+			for i in discreteParentValues:
+				cols = {}
+				for j in range(len(discreteParents)):
+					cols[discreteParents[j]] = i[j]
 
-    def _generateDCCPD(self, child, parents):
-        discreteParents = [i for i in parents]
-        discreteParentValues = self.combinations(discreteParents)
-        
-        gaus_for_all=[]
-        for i in discreteParentValues:
-            cols = {}
-            for j in range(len(discreteParents)):
-                cols[discreteParents[j]] = i[j]
+				y = self.data[np.logical_and.reduce([self.data[:, k] == cols[k] for k in cols])][:, child]
+				
+				if len(continuousParents) > 0:
+					# discrete and continuous
+					X = self.data[np.logical_and.reduce([self.data[:, k] == cols[k] for k in cols])][:, continuousParents]
+					self.cpd[child][tuple(i)] = CPD('hybrid', X, y, 'continuous')
+				else:
+					self.cpd[child][tuple(i)] = CPD('discrete', None, y, 'continuous')
 
-            x = self.data[np.logical_and.reduce([self.data[:, k] == cols[k] for k in cols])]
-            if len(x[:, child])!=0:
-                y=x[:, child]
-        
-                cols["mean"]=np.mean(y)
-                cols["var"]=np.var(y, dtype=np.float64)
-                gaus_for_all.append(cols)
-        print gaus_for_all
+		elif len(continuousParents) > 0:
+			# only continuous
+			X = self.data[:, continuousParents]   
+			y = self.data[:, child]
+			self.cpd[child][tuple(i)] = CPD('continuous', X, y, 'continuous')
+		else:
+			# no parent
+			y = self.data[:, child]
+			self.cpd[child]['independent'] = CPD('independent', None, y, 'continuous')
 
-        
-    def getCPD(self, child, parents):
+		
+	def getCPD(self, child, parents):
 		newParents = {}
 		for attributeIndex in parents:
 			parentValue = parents[attributeIndex]
@@ -373,14 +387,15 @@ class Preprocess:
 
 	
 def getParents(node):
-	return np.where(network[:, node] == 1)
+	return np.where(network[:, node] == 1)[0]
 
 if __name__ == '__main__':
-    #lines_to_read=100
-    #a=Preprocess('/home/karan/Downloads/census-income.data', lines_to_read)
-    #a=Preprocess('/home/karan/Downloads/census-income.data')
-    #a._generateDCCPD([0], [1,8])
-    #a._generateCCCPD([0],[39])
+	#lines_to_read=100
+	#a=Preprocess('/home/karan/Downloads/census-income.data', lines_to_read)
+	#a=Preprocess('/home/karan/Downloads/census-income.data')
+	#a._generateDCCPD([0], [1,8])
+	#a._generateCCCPD([0],[39])
+	network=init_network()
 	allNodes = attr.keys()
 	deadNodes = [i for i in allNodes if sum(network[:, i]) == 0 and sum(network[i,:]) == 0]
 
@@ -395,4 +410,4 @@ if __name__ == '__main__':
 			pass
 
 
-    pass
+	pass
