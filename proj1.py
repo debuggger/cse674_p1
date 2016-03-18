@@ -148,54 +148,50 @@ class SpecialDiscreteChild:
 		
 
 class CPD:
-    def __init__(self, parentType, X, y):
+    def __init__(self, parentType, X, y, childType='discrete'):
+		self.childType
 		self.parentType = parentType
 		self.classLabels = list(set(y))
 		self.classLabels.sort()
 
-		if self.parentType == 'hybrid' or self.parentType == 'continuous':
-			if len(set(y)) > 1:
-				clf = LogisticRegression(multi_class='multinomial', solver='newton-cg')
-				clf.fit(X, y)
+		if childType == 'discrete':
+			if self.parentType == 'hybrid' or self.parentType == 'continuous':
+				if len(set(y)) > 1:
+					clf = LogisticRegression(multi_class='multinomial', solver='newton-cg')
+					clf.fit(X, y)
+				else:
+					clf = SpecialDiscreteChild(set(y))
+			
+				self.obj = clf
+			
 			else:
-				clf = SpecialDiscreteChild(set(y))
-		
-			self.obj = clf
-		
+				unique, counts = np.unique(y, return_counts=True)
+				denom = sum(counts)
+				probTable = zip(unique, [i/denom for i in counts])
+				self.obj = defaultdict(lambda: 0, probTable)
+
+		elif childType = 'continuous':
+			if self.parentType == 'hybrid' or self.parentType == 'continuous':
+				pass
+			else:
+				pass
+
+
+	def getFullProbTable(self, conditionalVariables=None):
+		if self.childType == 'discrete':
+			if self.parentType == 'hybrid' or self.parentType == 'continuous':
+				clfResults = self.obj.predict_proba(conditionalVariables)
+				return zip(self.classLabels, clfResults[0])
+			else:
+				res = self.obj.items()
+				res.sort(key = lambda x: x[0])
+				return res
 		else:
-			unique, counts = np.unique(y, return_counts=True)
-			denom = sum(counts)
-			probTable = zip(unique, [i/denom for i in counts])
-			self.obj = defaultdict(lambda: 0, probTable)
+			if self.parentType == 'hybrid' or self.parentType == 'continuous':
+				pass
+			else:
+				pass
 
-
-    def getProb(self, X, c):
-        if self.parentType == 'hybrid' or self.parentType == 'continuous':
-			clfResults = self.obj.predict_proba(X)
-			res = []
-			for clfResult in clfResults:
-				if c in self.classLabels:
-					res.append(clfResult[self.classLabels.index(c)])
-				else:
-					res.append(0.0)
-			return res
-        else:
-            return self.obj[c]
-
-	def getFullProbTable(self, X=None):
-		if self.parentType == 'hybrid' or self.parentType == 'continuous':
-			clfResults = self.obj.predict_proba(X)
-			res = []
-			for clfResult in clfResults:
-				if c in self.classLabels:
-					res.append(clfResult[self.classLabels.index(c)])
-				else:
-					res.append(0.0)
-			return zip(self.classLabels, res)
-		else:
-			res = self.obj.items()
-			res.sort(key = lambda x: x[0])
-			return res
 
       
 		
@@ -293,7 +289,7 @@ class Preprocess:
 
 		else:
 			y = self.data[:, child]
-			self.cpd[child]['independent'] = CPD('independent', None, y)
+			self.cpd[child]['independent'] = CPD('independent', None, y, 'discrete')
 
     def _generateCCCPD(self, child, parents):
         continuousParents = [i for i in parents]
