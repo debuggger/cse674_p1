@@ -15,7 +15,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 attr = {
 		0: {'name': 'age' , 'type':'continuous'}, 
 		1: {'name': 'class_worker' , 'type':'discrete'}, 
-		2: {'name': 'ind_Code' , 'type':'discrete'}, 
+		2: {'name': 'ind_code' , 'type':'discrete'}, 
 		3: {'name': 'occ_code' , 'type':'discrete'}, 
 		4: {'name': 'edu' , 'type':'discrete'}, 
 		5: {'name': 'wage' , 'type':'continuous'}, 
@@ -58,12 +58,39 @@ attr = {
 	
 	}
 
+def init_network():
+	network = np.zeros((len(attr), len(attr)))
+	network[0, [1, 6, 7, 8, 9] = 1
+	network[1, [14, 15, 22]] = 1
+	network[4, [0, 9]] = 1
+	network[6, [8, 14, 29]] = 1
+	network[7, [22, 23]] = 1
+	network[11, [10, 29]] = 1
+	network[12, 22] = 1
+	network[14, 39] = 1
+	network[15:19, 41] = 1
+	network[20, [21, 28, 29]] = 1
+	network[22, 23] = 1
+	network[25, 21] = 1
+	network[26, [25, 27]] = 1
+	network[27, [20, 25]] = 1
+	network[29, 21] = 1
+	network[31, 23] = 1
+	network[32, [10, 11, 34]] = 1
+	network[33, [10, 32, 34]] = 1
+	network[34, [4, 10, 35]] = 1
+	network[35, [11, 26]] = 1
+	network[36, 41] = 1
+
+	return network
+
+
 def bfs(network):
 	traversal = []
 	q = []
 	visited = [False for i in range(network.shape[0])]
 	for i in range(network.shape[1]):
-		if sum(network[:,i]) == 0:
+		if (sum(network[:,i]) == 0) and sum(network[i, :]) > 0:
 			visited[i] = True
 			traversal.append(i)
 			q.insert(0, i)
@@ -88,20 +115,23 @@ class Sample:
 	def getIndependentNodes(self):
 		ind = []
 		for i in self.network.shape[1]:
-			if sum(self.network[:,i]) == 0:
+			if (sum(self.network[:,i]) == 0) and (sum(self.network[i, :]) > 0):
 				ind.append(i)
 		return ind
 		
-	def selectSampleValue(self, cpd):
-		prob = random.uniform(0.0, 1.0)
-		j = 0
-		s = cpd[0][1]
+	def selectSampleValue(self, node, cpd):
+		if attr[node]['type'] == 'discrete':
+			prob = random.uniform(0.0, 1.0)
+			j = 0
+			s = cpd[0][1]
 
-		while (prob > s):
-			j += 1
-			s += cpd[j][1]
+			while (prob > s):
+				j += 1
+				s += cpd[j][1]
 
-		return cpd[j][0]
+			return cpd[j][0]
+		else:
+			return np.random.normal(cpd['mean'], cpd['variance'])
 
 	def getKey(self, node, sample):
 		parents = np.where(self.network[:, node] == 1)[0] 
@@ -112,7 +142,6 @@ class Sample:
 		if len(continuousParents) == 0:
 			key = [sample[i] for i in discreteParents]
 			return (tuple(key), None)
-		
 		elif len(discreteParents) == 0:
 			return ('continuous', np.array([sample[i] for i in continuousParents]))
 		else:
@@ -132,7 +161,7 @@ class Sample:
 			node = traversal.pop(0)
 			key, X = self.getKey(node, sample)
 			cpd = p.cpd[node][key].getFullProbTable(X)
-			sample[i] = self.selectSampleValue(cpd)
+			sample[i] = self.selectSampleValue(node, cpd)
 
 
 
@@ -280,12 +309,12 @@ class Preprocess:
 					X = self.data[np.logical_and.reduce([self.data[:, k] == cols[k] for k in cols])][:, continuousParents]
 					self.cpd[child][tuple(i)] = CPD('hybrid', X, y)
 				else:
-					self.cpd[child][tuple(i)] = CPD('discrete', None, y)
+					self.cpd[child][tuple(i)] = CPD('discrete', None, y, 'discrete')
 
 		elif len(continuousParents) > 0:
 			X = self.data[:, continuousParents]
 			y = self.data[:, child]
-			self.cpd[child]['continuous'] = CPD('continuous', X, y)
+			self.cpd[child]['continuous'] = CPD('continuous', X, y, 'discrete')
 
 		else:
 			y = self.data[:, child]
