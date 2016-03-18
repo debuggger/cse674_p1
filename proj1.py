@@ -372,6 +372,8 @@ class Preprocess:
 		return (cpd, _cpd)
 
 	
+def getParents(node):
+	return np.where(network[:, node] == 1)
 
 if __name__ == '__main__':
     #lines_to_read=100
@@ -379,4 +381,18 @@ if __name__ == '__main__':
     #a=Preprocess('/home/karan/Downloads/census-income.data')
     #a._generateDCCPD([0], [1,8])
     #a._generateCCCPD([0],[39])
+	allNodes = attr.keys()
+	deadNodes = [i for i in allNodes if sum(network[:, i]) == 0 and sum(network[i,:]) == 0]
+
+	nodes = list(set(allNodes) - set(deadNodes))
+	nodes.sort()
+
+	p = Preprocess('census-income.data', 5000)
+	for i in nodes:
+		if attr[i]['type'] == 'discrete':
+			p._generateDiscreteChildCPD(i, getParents(i))
+		else:
+			pass
+
+
     pass
