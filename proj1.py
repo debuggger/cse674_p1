@@ -2,7 +2,7 @@ from collections import defaultdict
 import numpy as np
 from itertools import product
 from sklearn.linear_model import LogisticRegression
-
+from scipy import stats
 from sklearn.linear_model import LinearRegression
 from sklearn.linear_model import Ridge
 import random
@@ -63,8 +63,10 @@ def init_network():
 	network[0, [1, 6, 7, 8, 9]] = 1
 	network[1, [14, 15, 22]] = 1
 	network[4, [0, 9]] = 1
-	network[6, [8, 14, 29]] = 1
+	network[6, [8, 14, 39]] = 1
 	network[7, [22, 23]] = 1
+	network[8, [1, 9, 14]] = 1
+	network[9, [12, 39, 41]] = 1
 	network[11, [10, 29]] = 1
 	network[12, 22] = 1
 	network[14, 39] = 1
@@ -88,21 +90,26 @@ def init_network():
 def bfs(network):
 	traversal = []
 	q = []
+	for i in attr.keys():
+		if sum(network[i,:]) > 0:
+			print attr[i]['name'],'---',[attr[j]['name'] for j in np.where(network[i, :] == 1)[0]]
+
 	visited = [False for i in range(network.shape[0])]
 	for i in range(network.shape[1]):
 		if (sum(network[:,i]) == 0) and sum(network[i, :]) > 0:
 			visited[i] = True
 			traversal.append(i)
-			q.insert(0, i)
+			q.append(i)
 	while len(q) > 0:
-		vertex = q.pop()
+		vertex = q.pop(-1)
 		neighbours = np.where(network[vertex, :] == 1)[0]
 		for v in neighbours:
 			if not visited[v]:
-				q.insert(0, v) 
+				q.append(v) 
 				traversal.append(v)
 				visited[v] = True
 
+	print [attr[i]['name'] for i in traversal]
 	return traversal
 		
 
@@ -111,10 +118,11 @@ class Sample:
 		self.p = p
 		self.network = p.network
 		self.indNodes = self.getIndependentNodes()
+		self.traversal = bfs(self.network)
 
 	def getIndependentNodes(self):
 		ind = []
-		for i in self.network.shape[1]:
+		for i in range(self.network.shape[1]):
 			if (sum(self.network[:,i]) == 0) and (sum(self.network[i, :]) > 0):
 				ind.append(i)
 		return ind
@@ -150,18 +158,24 @@ class Sample:
 
 
 	def getSample(self):
-		traversal = bfs(self.network)
-		sample = [-1 for i in range(self.p.shape[1])]
-		for i in self.indNodes:
-			traversal.remove(i)
-			cpd = p.cpd[i]['independent'].getFullProbTable()
-			sample[i] = self.selectSampleValue(cpd)
+		traversal = self.traversal[:]
+		sample = [-1 for i in range(self.network.shape[1])]
+		for node in self.indNodes:
+			traversal.remove(node)
+			cpd = p.cpd[node]['independent'].getFullProbTable()
+			sample[node] = self.selectSampleValue(node, cpd)
 
 		while sample.count(-1) > 0:
 			node = traversal.pop(0)
 			key, X = self.getKey(node, sample)
+			print 'node', node, 'key',key
+			print 'keys:',p.cpd[node].keys()
+			print 'parents:',np.where(self.network[:, node] == 1)
+			print 'sample:',sample
 			cpd = p.cpd[node][key].getFullProbTable(X)
-			sample[i] = self.selectSampleValue(node, cpd)
+			sample[node] = self.selectSampleValue(node, cpd)
+
+		return sample
 
 
 
@@ -194,10 +208,14 @@ class CPD:
 				self.obj = clf
 			
 			else:
-				unique, counts = np.unique(y, return_counts=True)
-				denom = sum(counts)
-				probTable = zip(unique, [i/denom for i in counts])
-				self.obj = defaultdict(lambda: 0, probTable)
+				if len(set(y)) > 1:
+					#print 'y:',y
+					counts = stats.itemfreq(y)
+					denom = sum([i[1] for i in counts])
+					probTable = [(i[0], i[1]/denom) for i in counts]
+					self.obj = defaultdict(lambda: 0, probTable)
+				else:
+					self.obj = SpecialDiscreteChild(set(y))
 
 		elif childType == 'continuous':
 			if self.parentType == 'hybrid' or self.parentType == 'continuous':
@@ -208,10 +226,8 @@ class CPD:
 				self.lr_variance = 1-q.score(X,y)
 				# y_pre = model.predict(x)
 			else:
-				mean=np.mean(y)
-				variance=np.var(y, dtype=np.float64)
-				self.mean=mean
-				self.variance=variance
+				self.mean=np.mean(y)
+				self.variance=np.var(y, dtype=np.float64)
 
 
 	def getFullProbTable(self, conditionalVariables=None):
@@ -230,7 +246,7 @@ class CPD:
 				res={"mean":lr_predict, "variance":self.lr_variance}
 				return res
 			else:
-				res={"mean":mean, "variance":self.variance}
+				res={"mean":self.mean, "variance":self.variance}
 				return res
 
 
@@ -238,8 +254,9 @@ class CPD:
 		
 
 class Preprocess:
-	def __init__(self, dataFile, N=199523, cols = 42):
+	def __init__(self, dataFile, network, N=199523):
 		self.dataFile = dataFile
+		self.network = network
 		self.rawData = []
 		self.cpd = {}
 
@@ -265,16 +282,17 @@ class Preprocess:
 		self.valueEnumMap = [defaultdict(lambda: 0) for i in range(self.numAttrs)]
 		self.enumValueMap = [defaultdict(lambda: 0) for i in range(self.numAttrs)]
 		for attributeIndex in range(self.numAttrs):
-			uniqueVals = self.map[attributeIndex].keys()
-			for uniqueVal in uniqueVals:
-				self.valueEnumMap[attributeIndex][uniqueVal.lower()] = uniqueVals.index(uniqueVal)
-				self.enumValueMap[attributeIndex][uniqueVals.index(uniqueVal)] = uniqueVal.lower()
+			if attr[attributeIndex]['type'] == 'discrete':
+				uniqueVals = self.map[attributeIndex].keys()
+				for uniqueVal in uniqueVals:
+					self.valueEnumMap[attributeIndex][uniqueVal.lower()] = uniqueVals.index(uniqueVal)
+					self.enumValueMap[attributeIndex][uniqueVals.index(uniqueVal)] = uniqueVal.lower()
 
 	def compactifyData(self):
 		#self.data is  a numpy matrix representation of the data
 		self.data = np.array(np.zeros(len(self.rawData[0])))
 		for row in self.rawData:
-			self.data = np.vstack([self.data, [self.valueEnumMap[attributeIndex][row[attributeIndex].lower()] for attributeIndex in range(len(row))]])
+			self.data = np.vstack([self.data, [self.valueEnumMap[attributeIndex][row[attributeIndex].lower()] if attr[attributeIndex]['type'] == 'discrete' else float(row[attributeIndex]) for attributeIndex in range(len(row))]])
 	
 	def flatten(self, bla):
 		output = []
@@ -299,7 +317,7 @@ class Preprocess:
 
 	# continuous parent to discrete child
 	def _generateDiscreteChildCPD(self, child, parents):
-		print parents
+		#print parents
 		discreteParents = [i for i in parents if attr[i]['type'] == 'discrete']
 		continuousParents = [i for i in parents if attr[i]['type'] == 'continuous']
 			   
@@ -312,6 +330,7 @@ class Preprocess:
 		if len(discreteParents) > 0:
 			discreteParentValues = self.combinations(discreteParents)
 			for i in discreteParentValues:
+				#print 'dc:',i
 				cols = {}
 				for j in range(len(discreteParents)):
 					cols[discreteParents[j]] = i[j]
@@ -323,6 +342,8 @@ class Preprocess:
 					self.cpd[child][tuple(i)] = CPD('hybrid', X, y)
 				else:
 					self.cpd[child][tuple(i)] = CPD('discrete', None, y, 'discrete')
+					if child == 41:
+						print tuple(i), '---',self.cpd[child][tuple(i)]
 
 		elif len(continuousParents) > 0:
 			X = self.data[:, continuousParents]
@@ -334,6 +355,7 @@ class Preprocess:
 			self.cpd[child]['independent'] = CPD('independent', None, y, 'discrete')
 
 	def _generateContinuousChildCPD(self, child, parents):
+		print parents
 		discreteParents = [i for i in parents if attr[i]['type'] == 'discrete']
 		continuousParents = [i for i in parents if attr[i]['type'] == 'continuous']
 			   
@@ -395,19 +417,20 @@ if __name__ == '__main__':
 	#a=Preprocess('/home/karan/Downloads/census-income.data')
 	#a._generateDCCPD([0], [1,8])
 	#a._generateCCCPD([0],[39])
-	network=init_network()
+	network = init_network()
 	allNodes = attr.keys()
 	deadNodes = [i for i in allNodes if sum(network[:, i]) == 0 and sum(network[i,:]) == 0]
-
 	nodes = list(set(allNodes) - set(deadNodes))
 	nodes.sort()
 
-	p = Preprocess('census-income.data', 5000)
+	p = Preprocess('census-income.data', network, 100)
 	for i in nodes:
+		print 'node:', i
 		if attr[i]['type'] == 'discrete':
 			p._generateDiscreteChildCPD(i, getParents(i))
 		else:
+			p._generateContinuousChildCPD(i, getParents(i))
 			pass
 
-
-	pass
+	s = Sample(p)
+	print s.getSample()
