@@ -87,12 +87,31 @@ def init_network():
 	return network
 
 
+def rem(n):
+	return np.where(np.sum(n, (1))> 0)[0]
+
+def topoSort(network):
+	n = np.array(network)
+	t = []
+
+	dead = set(np.where(np.sum(n, 0) == 0)[0]).intersection(set(np.where(np.sum(n, 1) == 0)[0]))
+	remaining = set(attr.keys()) - dead
+
+	while np.sum(n) > 0:
+		for i in range(network.shape[0]):
+			if sum(n[:,i]) == 0 and sum(n[i, :]) > 0:
+				t.append(i)
+				n[i, :] = 0
+				remaining.remove(i)
+	for i in remaining:
+		t.append(i)
+
+	return t
+
 def bfs(network):
+	topoSort(network)
 	traversal = []
 	q = []
-	for i in attr.keys():
-		if sum(network[i,:]) > 0:
-			print attr[i]['name'],'---',[attr[j]['name'] for j in np.where(network[i, :] == 1)[0]]
 
 	visited = [False for i in range(network.shape[0])]
 	for i in range(network.shape[1]):
@@ -109,7 +128,6 @@ def bfs(network):
 				traversal.append(v)
 				visited[v] = True
 
-	print [attr[i]['name'] for i in traversal]
 	return traversal
 		
 
@@ -118,7 +136,7 @@ class Sample:
 		self.p = p
 		self.network = p.network
 		self.indNodes = self.getIndependentNodes()
-		self.traversal = bfs(self.network)
+		self.traversal = topoSort(self.network)
 
 	def getIndependentNodes(self):
 		ind = []
@@ -168,10 +186,6 @@ class Sample:
 		while sample.count(-1) > 0:
 			node = traversal.pop(0)
 			key, X = self.getKey(node, sample)
-			print 'node', node, 'key',key
-			print 'keys:',p.cpd[node].keys()
-			print 'parents:',np.where(self.network[:, node] == 1)
-			print 'sample:',sample
 			cpd = p.cpd[node][key].getFullProbTable(X)
 			sample[node] = self.selectSampleValue(node, cpd)
 
@@ -208,14 +222,17 @@ class CPD:
 				self.obj = clf
 			
 			else:
-				if len(set(y)) > 1:
-					#print 'y:',y
+				if len(set(y)) > 0:
 					counts = stats.itemfreq(y)
 					denom = sum([i[1] for i in counts])
 					probTable = [(i[0], i[1]/denom) for i in counts]
 					self.obj = defaultdict(lambda: 0, probTable)
 				else:
+					self.obj = defaultdict(lambda: 0)
+				'''
+				else:
 					self.obj = SpecialDiscreteChild(set(y))
+				'''
 
 		elif childType == 'continuous':
 			if self.parentType == 'hybrid' or self.parentType == 'continuous':
@@ -317,7 +334,6 @@ class Preprocess:
 
 	# continuous parent to discrete child
 	def _generateDiscreteChildCPD(self, child, parents):
-		#print parents
 		discreteParents = [i for i in parents if attr[i]['type'] == 'discrete']
 		continuousParents = [i for i in parents if attr[i]['type'] == 'continuous']
 			   
@@ -330,7 +346,6 @@ class Preprocess:
 		if len(discreteParents) > 0:
 			discreteParentValues = self.combinations(discreteParents)
 			for i in discreteParentValues:
-				#print 'dc:',i
 				cols = {}
 				for j in range(len(discreteParents)):
 					cols[discreteParents[j]] = i[j]
@@ -342,8 +357,6 @@ class Preprocess:
 					self.cpd[child][tuple(i)] = CPD('hybrid', X, y)
 				else:
 					self.cpd[child][tuple(i)] = CPD('discrete', None, y, 'discrete')
-					if child == 41:
-						print tuple(i), '---',self.cpd[child][tuple(i)]
 
 		elif len(continuousParents) > 0:
 			X = self.data[:, continuousParents]
@@ -355,7 +368,6 @@ class Preprocess:
 			self.cpd[child]['independent'] = CPD('independent', None, y, 'discrete')
 
 	def _generateContinuousChildCPD(self, child, parents):
-		print parents
 		discreteParents = [i for i in parents if attr[i]['type'] == 'discrete']
 		continuousParents = [i for i in parents if attr[i]['type'] == 'continuous']
 			   
@@ -417,6 +429,7 @@ if __name__ == '__main__':
 	#a=Preprocess('/home/karan/Downloads/census-income.data')
 	#a._generateDCCPD([0], [1,8])
 	#a._generateCCCPD([0],[39])
+	np.set_printoptions(threshold='nan')
 	network = init_network()
 	allNodes = attr.keys()
 	deadNodes = [i for i in allNodes if sum(network[:, i]) == 0 and sum(network[i,:]) == 0]
@@ -425,7 +438,6 @@ if __name__ == '__main__':
 
 	p = Preprocess('census-income.data', network, 100)
 	for i in nodes:
-		print 'node:', i
 		if attr[i]['type'] == 'discrete':
 			p._generateDiscreteChildCPD(i, getParents(i))
 		else:
