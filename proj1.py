@@ -11,6 +11,7 @@ import random
 # ignore DeprecateWarnings by sklearn
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+import pickle
 
 attr = {
 		0: {'name': 'age' , 'type':'continuous'}, 
@@ -86,6 +87,8 @@ def init_network():
 
 	return network
 
+def defaultLambda():
+	return 0
 
 def rem(n):
 	return np.where(np.sum(n, (1))> 0)[0]
@@ -226,9 +229,9 @@ class CPD:
 					counts = stats.itemfreq(y)
 					denom = sum([i[1] for i in counts])
 					probTable = [(i[0], i[1]/denom) for i in counts]
-					self.obj = defaultdict(lambda: 0, probTable)
+					self.obj = defaultdict(defaultLambda, probTable)
 				else:
-					self.obj = defaultdict(lambda: 0)
+					self.obj = defaultdict(defaultLambda)
 				'''
 				else:
 					self.obj = SpecialDiscreteChild(set(y))
@@ -283,7 +286,7 @@ class Preprocess:
 
 
 		self.numAttrs = len(lines[0].split(','))
-		self.map = [defaultdict(lambda: 0) for attributeIndex in range(self.numAttrs)]
+		self.map = [defaultdict(defaultLambda) for attributeIndex in range(self.numAttrs)]
 
 		for dataRow in lines:
 			dataSample = dataRow.split(',')
@@ -296,8 +299,8 @@ class Preprocess:
 		self.compactifyData()
 	
 	def generateValueMappings(self):
-		self.valueEnumMap = [defaultdict(lambda: 0) for i in range(self.numAttrs)]
-		self.enumValueMap = [defaultdict(lambda: 0) for i in range(self.numAttrs)]
+		self.valueEnumMap = [defaultdict(defaultLambda) for i in range(self.numAttrs)]
+		self.enumValueMap = [defaultdict(defaultLambda) for i in range(self.numAttrs)]
 		for attributeIndex in range(self.numAttrs):
 			if attr[attributeIndex]['type'] == 'discrete':
 				uniqueVals = self.map[attributeIndex].keys()
@@ -340,7 +343,7 @@ class Preprocess:
 		discreteParents.sort()
 		continuousParents.sort()
 
-		self.cpd[child] = defaultdict(lambda: 0.0)
+		self.cpd[child] = defaultdict(defaultLambda)
 		childDomain = set(self.data[:, child]) 
 
 		if len(discreteParents) > 0:
@@ -374,7 +377,7 @@ class Preprocess:
 		discreteParents.sort()
 		continuousParents.sort()
 
-		self.cpd[child] = defaultdict(lambda: 0.0)
+		self.cpd[child] = defaultdict(defaultLambda)
 		childDomain = set(self.data[:, child])
 
 		if len(discreteParents) > 0:
@@ -436,13 +439,15 @@ if __name__ == '__main__':
 	nodes = list(set(allNodes) - set(deadNodes))
 	nodes.sort()
 
-	p = Preprocess('census-income.data', network, 100)
+	p = Preprocess('census-income.data', network, 1000)
 	for i in nodes:
 		if attr[i]['type'] == 'discrete':
 			p._generateDiscreteChildCPD(i, getParents(i))
 		else:
 			p._generateContinuousChildCPD(i, getParents(i))
 			pass
+		filename = str(i)+'.p'
+		pickle.dump( p.cpd[i], open( filename, "wb" ) )
 
-	s = Sample(p)
-	print s.getSample()
+	#s = Sample(p)
+	#print s.getSample()
