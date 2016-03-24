@@ -151,6 +151,8 @@ class Sample:
 		
 	def selectSampleValue(self, node, cpd):
 		if attr[node]['type'] == 'discrete':
+			if len(cpd) == 0:
+				return -1
 			prob = random.uniform(0.0, 1.0)
 			j = 0
 			s = cpd[0][1]
@@ -161,6 +163,8 @@ class Sample:
 
 			return cpd[j][0]
 		else:
+			if cpd['mean'] == 0.0 and cpd['variance'] == 0.0:
+				return -1
 			return np.random.normal(cpd['mean'], cpd['variance'])
 
 	def getKey(self, node, sample):
@@ -197,11 +201,13 @@ class Sample:
 				node = traversal.pop(0)
 				key, X = self.getKey(node, sample)
 				cpd = self.cpd[node][key].getFullProbTable(X)
-				if len(cpd) == 0:
+				
+				sampledValue = self.selectSampleValue(node, cpd)
+				if sampledValue == -1:
 					gotAValidSample = False
 					break
-				temp = self.selectSampleValue(node, cpd)
-				sample[node] = temp
+				
+				sample[node] = sampledValue
 
 		return sample
 
