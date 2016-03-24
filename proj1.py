@@ -135,11 +135,12 @@ def bfs(network):
 		
 
 class Sample:
-	def __init__(self, p):
-		self.p = p
-		self.network = p.network
+	def __init__(self, cpd, network):
+		self.cpd = cpd
+		self.network = network
 		self.indNodes = self.getIndependentNodes()
 		self.traversal = topoSort(self.network)
+		self.deadNodes = [i for i in allNodes if sum(network[:, i]) == 0 and sum(network[i,:]) == 0]
 
 	def getIndependentNodes(self):
 		ind = []
@@ -179,18 +180,28 @@ class Sample:
 
 
 	def getSample(self):
-		traversal = self.traversal[:]
-		sample = [-1 for i in range(self.network.shape[1])]
-		for node in self.indNodes:
-			traversal.remove(node)
-			cpd = p.cpd[node]['independent'].getFullProbTable()
-			sample[node] = self.selectSampleValue(node, cpd)
+		gotAValidSample = False
 
-		while sample.count(-1) > 0:
-			node = traversal.pop(0)
-			key, X = self.getKey(node, sample)
-			cpd = p.cpd[node][key].getFullProbTable(X)
-			sample[node] = self.selectSampleValue(node, cpd)
+		count = 0
+		while not gotAValidSample:
+			traversal = self.traversal[:]
+			sample = [-1 for i in range(self.network.shape[1])]
+			count += 1
+			gotAValidSample = True
+			for node in self.indNodes:
+				traversal.remove(node)
+				cpd = self.cpd[node]['independent'].getFullProbTable()
+				sample[node] = self.selectSampleValue(node, cpd)
+
+			while sample.count(-1) > len(self.deadNodes):
+				node = traversal.pop(0)
+				key, X = self.getKey(node, sample)
+				cpd = self.cpd[node][key].getFullProbTable(X)
+				if len(cpd) == 0:
+					gotAValidSample = False
+					break
+				temp = self.selectSampleValue(node, cpd)
+				sample[node] = temp
 
 		return sample
 
@@ -423,7 +434,7 @@ class Preprocess:
 		return (cpd, _cpd)
 
 	
-def getParents(node):
+def getParents(node, network):
 	return np.where(network[:, node] == 1)[0]
 
 if __name__ == '__main__':
@@ -438,8 +449,8 @@ if __name__ == '__main__':
 	deadNodes = [i for i in allNodes if sum(network[:, i]) == 0 and sum(network[i,:]) == 0]
 	nodes = list(set(allNodes) - set(deadNodes))
 	nodes.sort()
-
-	p = Preprocess('census-income.data', network, 1000)
+	'''
+	p = Preprocess('census-income.data', network, 500)
 	for i in nodes:
 		if attr[i]['type'] == 'discrete':
 			p._generateDiscreteChildCPD(i, getParents(i))
@@ -448,6 +459,9 @@ if __name__ == '__main__':
 			pass
 		filename = str(i)+'.p'
 		pickle.dump( p.cpd[i], open( filename, "wb" ) )
-
-	#s = Sample(p)
-	#print s.getSample()
+	'''
+	cpd = {}
+	for i in nodes:
+		cpd[i] = pickle.load(open(str(i)+'.p'))
+	s = Sample(cpd, init_network())
+	print s.getSample()
