@@ -471,7 +471,8 @@ def inference(cpd, nodes, inferenceVariables, evidence):
 			samples = np.vstack([samples, sample])
 
 
-	inferenceResult = samples[np.logical_and.reduce([samples[:, i] == inferenceVariables[i] for i in inferenceVariables])]
+	inferenceResult = samples[np.logical_or.reduce([np.logical_and.reduce([samples[:, i] == inferenceVariables[j][i] for i in inferenceVariables[j]]) for j in range(len(inferenceVariables))])]
+
 
 	inferenceProb  = inferenceResult.shape[0]/float(samples.shape[0])
 	print inferenceProb
@@ -494,4 +495,5 @@ if __name__ == '__main__':
 	for i in nodes:
 		cpd[i] = pickle.load(open(str(i)+'.p'))
 
-	inference(cpd, nodes, {1: 0.0}, {})
+	inference(cpd, nodes, [{12: 0.0}, {12: 1.0}], {})
+
