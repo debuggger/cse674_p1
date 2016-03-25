@@ -7,7 +7,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.linear_model import Ridge
 import random
 #from matplotlib import pyplot as plt
-
+import math
 # ignore DeprecateWarnings by sklearn
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -163,9 +163,10 @@ class Sample:
 
 			return cpd[j][0]
 		else:
-			if cpd['mean'] == 0.0 and cpd['variance'] == 0.0:
-				return -1
-			return np.random.normal(cpd['mean'], cpd['variance'])
+			if cpd['variance'] == 0.0:
+				return cpd['mean']
+			print 'node:', node, 'mean:',cpd['mean'], 'var:', cpd['variance']
+			return np.random.normal(cpd['mean'], math.sqrt(cpd['variance']))
 
 	def getKey(self, node, sample):
 		parents = np.where(self.network[:, node] == 1)[0] 
@@ -443,6 +444,42 @@ class Preprocess:
 def getParents(node, network):
 	return np.where(network[:, node] == 1)[0]
 
+def train(filename, nodes, network):
+	p = Preprocess(filename, network, 500)
+	for i in nodes:
+		if attr[i]['type'] == 'discrete':
+			p._generateDiscreteChildCPD(i, getParents(i))
+		else:
+			p._generateContinuousChildCPD(i, getParents(i))
+			pass
+		filename = str(i)+'.p'
+		pickle.dump( p.cpd[i], open( filename, "wb" ) )
+
+def inference(nodes):
+	cpd = {}
+	
+	for i in nodes:
+		cpd[i] = pickle.load(open(str(i)+'.p'))
+	
+	s = Sample(cpd, init_network())
+	
+	evidence = {}
+	samples = []
+
+	while len(samples) < 5:
+		sample = s.getSample()
+		match = True
+		for i in evidence:
+			if sample[i] != evidence[i]:
+				match = False
+				break
+		if not match:
+			continue
+		samples.append(sample)
+
+	print samples
+
+
 if __name__ == '__main__':
 	#lines_to_read=100
 	#a=Preprocess('/home/karan/Downloads/census-income.data', lines_to_read)
@@ -455,19 +492,7 @@ if __name__ == '__main__':
 	deadNodes = [i for i in allNodes if sum(network[:, i]) == 0 and sum(network[i,:]) == 0]
 	nodes = list(set(allNodes) - set(deadNodes))
 	nodes.sort()
-	'''
-	p = Preprocess('census-income.data', network, 500)
-	for i in nodes:
-		if attr[i]['type'] == 'discrete':
-			p._generateDiscreteChildCPD(i, getParents(i))
-		else:
-			p._generateContinuousChildCPD(i, getParents(i))
-			pass
-		filename = str(i)+'.p'
-		pickle.dump( p.cpd[i], open( filename, "wb" ) )
-	'''
-	cpd = {}
-	for i in nodes:
-		cpd[i] = pickle.load(open(str(i)+'.p'))
-	s = Sample(cpd, init_network())
-	print s.getSample()
+	
+	#train('census-income.data', nodes, network)
+
+	inference(nodes)
