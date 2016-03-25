@@ -165,7 +165,6 @@ class Sample:
 		else:
 			if cpd['variance'] == 0.0:
 				return cpd['mean']
-			print 'node:', node, 'mean:',cpd['mean'], 'var:', cpd['variance']
 			return np.random.normal(cpd['mean'], math.sqrt(cpd['variance']))
 
 	def getKey(self, node, sample):
@@ -445,7 +444,7 @@ def getParents(node, network):
 	return np.where(network[:, node] == 1)[0]
 
 def train(filename, nodes, network):
-	p = Preprocess(filename, network, 500)
+	p = Preprocess(filename, network)
 	for i in nodes:
 		if attr[i]['type'] == 'discrete':
 			p._generateDiscreteChildCPD(i, getParents(i))
@@ -464,9 +463,9 @@ def inference(nodes):
 	s = Sample(cpd, init_network())
 	
 	evidence = {}
-	samples = []
+	samples = np.array([np.zeros(42)])
 
-	while len(samples) < 5:
+	while samples.shape[0] < 5:
 		sample = s.getSample()
 		match = True
 		for i in evidence:
@@ -475,17 +474,12 @@ def inference(nodes):
 				break
 		if not match:
 			continue
-		samples.append(sample)
+		samples = np.vstack([samples, sample])
 
-	print samples
+	return samples
 
 
 if __name__ == '__main__':
-	#lines_to_read=100
-	#a=Preprocess('/home/karan/Downloads/census-income.data', lines_to_read)
-	#a=Preprocess('/home/karan/Downloads/census-income.data')
-	#a._generateDCCPD([0], [1,8])
-	#a._generateCCCPD([0],[39])
 	np.set_printoptions(threshold='nan')
 	network = init_network()
 	allNodes = attr.keys()
@@ -493,6 +487,6 @@ if __name__ == '__main__':
 	nodes = list(set(allNodes) - set(deadNodes))
 	nodes.sort()
 	
-	#train('census-income.data', nodes, network)
+	train('census-income.data', nodes, network)
 
 	inference(nodes)
