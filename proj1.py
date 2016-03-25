@@ -454,15 +454,10 @@ def train(filename, nodes, network):
 		filename = str(i)+'.p'
 		pickle.dump( p.cpd[i], open( filename, "wb" ) )
 
-def inference(nodes):
-	cpd = {}
-	
-	for i in nodes:
-		cpd[i] = pickle.load(open(str(i)+'.p'))
+def inference(cpd, nodes, inferenceVariables, evidence):
 	
 	s = Sample(cpd, init_network())
 	
-	evidence = {}
 	samples = np.array([np.zeros(42)])
 
 	while samples.shape[0] < 5:
@@ -472,11 +467,16 @@ def inference(nodes):
 			if sample[i] != evidence[i]:
 				match = False
 				break
-		if not match:
-			continue
-		samples = np.vstack([samples, sample])
+		if match:
+			samples = np.vstack([samples, sample])
 
-	return samples
+
+	inferenceResult = samples[np.logical_and.reduce([samples[:, i] == inferenceVariables[i] for i in inferenceVariables])]
+
+	inferenceProb  = inferenceResult.shape[0]/float(samples.shape[0])
+	print inferenceProb
+
+	return inferenceProb
 
 
 if __name__ == '__main__':
@@ -487,6 +487,11 @@ if __name__ == '__main__':
 	nodes = list(set(allNodes) - set(deadNodes))
 	nodes.sort()
 	
-	train('census-income.data', nodes, network)
+	#train('census-income.data', nodes, network)
 
-	inference(nodes)
+	cpd = {}
+	
+	for i in nodes:
+		cpd[i] = pickle.load(open(str(i)+'.p'))
+
+	inference(cpd, nodes, {1: 0.0}, {})
