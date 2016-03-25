@@ -488,12 +488,17 @@ if __name__ == '__main__':
 	nodes = list(set(allNodes) - set(deadNodes))
 	nodes.sort()
 	
-	#train('census-income.data', nodes, network)
+	train('census-income.data', nodes, network)
 
 	cpd = {}
 	
 	for i in nodes:
 		cpd[i] = pickle.load(open(str(i)+'.p'))
 
-	inference(cpd, nodes, [{12: 0.0}, {12: 1.0}], {})
+	inference(cpd, nodes, [{12: 1}], {4: 8})
+	inference(cpd, nodes, [{4: 0}, {4: 3}, {4: 4}, {4: 6}, {4: 10}, {4: 12}, {4: 13}, {4: 5}, {4: 15}], {14: 0})
+	inference(cpd, nodes, [{41: 0}], {25: 0, 27: 8})
+	inference(cpd, nodes, [{41: 0}], {})
+	inference(cpd, nodes, [{41: 0}], {12: 1})
+	inference(cpd, nodes, [{15: 0}, {15: 4}, {15: 5}], {12: 1})
 
